@@ -7,6 +7,7 @@ from google import genai
 from huggingface_search import answer_h
 from arxiv_search import answer_a
 from kaggle_search import answer_k
+from utils import parse_json_object
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -106,28 +107,6 @@ class FineTuningAgent:
                 summary.append(f"{platform.title()}: {', '.join(terms[:3])}{'...' if len(terms) > 3 else ''}")
         return " | ".join(summary) if summary else "No accumulated terms yet"
     
-    @staticmethod
-    def _parse_json_object(response: str) -> Dict[str, Any]:
-        """Parse the first JSON object embedded in an LLM response."""
-        text = (response or "").strip()
-        if not text:
-            return {}
-        if text.startswith("```"):
-            text = text.replace("```json", "", 1).replace("```", "").strip()
-        try:
-            parsed = json.loads(text)
-            return parsed if isinstance(parsed, dict) else {}
-        except json.JSONDecodeError:
-            start = text.find("{")
-            end = text.rfind("}")
-            if start == -1 or end <= start:
-                return {}
-            try:
-                parsed = json.loads(text[start:end + 1])
-                return parsed if isinstance(parsed, dict) else {}
-            except json.JSONDecodeError:
-                return {}
-
     def query_gemini(self, prompt: str, max_retries: int = 3) -> Optional[str]:
         """Query Gemini API with retry logic and error handling."""
         if client is None:
@@ -238,7 +217,7 @@ Be specific and helpful in your analysis.
             try:
                 # Extract JSON from response
                 response = response.strip()
-                data = self._parse_json_object(response)
+                data = parse_json_object(response)
                 if not data:
                     raise json.JSONDecodeError("No JSON object found", response, 0)
                 else:
