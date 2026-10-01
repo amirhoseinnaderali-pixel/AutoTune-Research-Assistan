@@ -13,8 +13,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Gemini API configuration
-API_KEY = "AIzaSyD4-OYglZP9aqgtvLiJ5zLdWWmWMYMWENQ"
-MODEL_NAME = "gemini-2.0-flash"
+API_KEY = os.getenv("GEMINI_API_KEY")
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 # Initialize Gemini client
 client = None
@@ -106,6 +106,28 @@ class FineTuningAgent:
                 summary.append(f"{platform.title()}: {', '.join(terms[:3])}{'...' if len(terms) > 3 else ''}")
         return " | ".join(summary) if summary else "No accumulated terms yet"
     
+    @staticmethod
+    def _parse_json_object(response: str) -> Dict[str, Any]:
+        """Parse the first JSON object embedded in an LLM response."""
+        text = (response or "").strip()
+        if not text:
+            return {}
+        if text.startswith("```"):
+            text = text.replace("```json", "", 1).replace("```", "").strip()
+        try:
+            parsed = json.loads(text)
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            start = text.find("{")
+            end = text.rfind("}")
+            if start == -1 or end <= start:
+                return {}
+            try:
+                parsed = json.loads(text[start:end + 1])
+                return parsed if isinstance(parsed, dict) else {}
+            except json.JSONDecodeError:
+                return {}
+
     def query_gemini(self, prompt: str, max_retries: int = 3) -> Optional[str]:
         """Query Gemini API with retry logic and error handling."""
         if client is None:
@@ -216,8 +238,9 @@ Be specific and helpful in your analysis.
             try:
                 # Extract JSON from response
                 response = response.strip()
-                if response.startswith('{') and response.endswith('}'):
-                    data = json.loads(response)
+                data = self._parse_json_object(response)
+                if not data:
+                    raise json.JSONDecodeError("No JSON object found", response, 0)
                 else:
                     start_idx = response.find('{')
                     end_idx = response.rfind('}')
@@ -284,8 +307,9 @@ Make queries specific, relevant, and likely to return high-quality results.
         if response:
             try:
                 response = response.strip()
-                if response.startswith('{') and response.endswith('}'):
-                    queries = json.loads(response)
+                queries = self._parse_json_object(response)
+                if not queries:
+                    raise json.JSONDecodeError("No JSON object found", response, 0)
                 else:
                     start_idx = response.find('{')
                     end_idx = response.rfind('}')
