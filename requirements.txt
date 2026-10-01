@@ -1,0 +1,6 @@
+google-genai
+requests
+feedparser
+huggingface_hub
+kaggle
+pytest
